@@ -2,70 +2,106 @@
 pipeline {
     agent any
 
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
     environment {
-        PYTHONUNBUFFERED = '1'
         DOCKER_IMAGE_NAME = 'library-management-platform'
         IMAGE_TAG = "v1.${BUILD_NUMBER}"
     }
 
     stages {
+
         stage('SCM Checkout') {
             steps {
-                echo 'Checking out source code from GitHub repository...'
                 checkout scm
             }
         }
 
         stage('Environment Setup & Dependencies') {
             steps {
-                echo 'Setting up Python 3.11 virtual environment and installing packages...'
                 sh '''
+                    set -e
                     python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
+                    ./venv/bin/python -m pip install --upgrade pip
+                    ./venv/bin/pip install -r requirements.txt
                 '''
             }
         }
 
         stage('Code Linting & Syntax Gate') {
             steps {
-                echo 'Executing static syntax and style checks via Flake8...'
                 sh '''
-                    . venv/bin/activate
-                    flake8 app/ database/ --count --select=E9,F63,F7,F82 --show-source --statistics
+                    set -e
+                    ./venv/bin/flake8 app/ database/ \
+                      --count --select=E9,F63,F7,F82 \
+                      --show-source --statistics
                 '''
             }
         }
 
         stage('Automated Unit & Integration Tests') {
             steps {
-                echo 'Running Pytest test suites and exporting JUnit XML reports...'
                 sh '''
-                    . venv/bin/activate
+                    set -e
                     mkdir -p reports
-                    pytest -v --cov=app --junitxml=reports/test-results.xml tests/
+                    ./venv/bin/pytest -v --cov=app \
+                      --junitxml=reports/test-results.xml tests/
                 '''
             }
         }
 
         stage('Build Docker Artifact') {
             steps {
-                echo "Packaging container image: ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}..."
                 sh '''
-                    docker build -t ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} .
-                    docker tag ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_IMAGE_NAME}:latest
+                    set -e
+
+                    echo "Building Docker image..."
+                    docker build \
+                      -t ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} .
+
+                    echo "Tagging latest image..."
+                    docker tag \
+                      ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} \
+                      ${DOCKER_IMAGE_NAME}:latest
+
+                    docker images ${DOCKER_IMAGE_NAME}
                 '''
             }
         }
 
         stage('Kubernetes Minikube Deployment') {
             steps {
-                echo 'Applying Kubernetes manifests to Minikube cluster...'
                 sh '''
+                    set -e
+
+                    echo "Checking Kubernetes cluster..."
+                    kubectl get nodes
+
+                    echo "Loading Docker image into Minikube..."
+                    minikube image load \
+                      ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}
+
+                    echo "Applying Kubernetes manifests..."
                     kubectl apply -f k8s/deployment.yaml
                     kubectl apply -f k8s/service.yaml
-                    kubectl rollout status deployment/library-deployment --timeout=60s
+
+                    echo "Updating deployment image..."
+                    kubectl set image \
+                      deployment/library-deployment \
+                      library-app=${DOCKER_IMAGE_NAME}:${IMAGE_TAG}
+
+                    echo "Waiting for rollout..."
+                    kubectl rollout status \
+                      deployment/library-deployment \
+                      --timeout=180s
+
+                    echo "Deployment status:"
+                    kubectl get deployments
+                    kubectl get pods -o wide
+                    kubectl get services
                 '''
             }
         }
@@ -73,15 +109,18 @@ pipeline {
 
     post {
         always {
-            echo 'Archiving test execution reports...'
-            junit allowEmptyResults: true, testResults: 'reports/test-results.xml'
-            cleanWs deleteDirs: true, notFailBuild: true
+            junit allowEmptyResults: true,
+                  testResults: 'reports/test-results.xml'
+
+            cleanWs()
         }
+
         success {
-            echo "CI/CD Pipeline executed successfully for build #${BUILD_NUMBER}!"
+            echo 'CI/CD Pipeline completed successfully!'
         }
+
         failure {
-            echo "Build #${BUILD_NUMBER} FAILED! Inspect console log output for root cause."
+            echo 'CI/CD Pipeline failed. Check console output.'
         }
     }
 }
