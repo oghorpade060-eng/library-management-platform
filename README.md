@@ -1,4 +1,4 @@
-# Enterprise Smart Library Management Platform
+# Library Management Platform
 
 A Flask-based REST API for managing library books, users, and loans, delivered through a complete DevOps pipeline: **Git/GitHub -> Jenkins CI -> Docker -> Kubernetes (Minikube)**.
 
@@ -98,7 +98,7 @@ library-management-platform/
 
 ```bash
 # Clone the repository
-git clone https://github.com/Sanket-dev98/library-management-platform.git
+git clone https://github.com/oghorpade060-eng/library-management-platform.git
 cd library-management-platform
 
 # Create and activate a virtual environment
@@ -302,11 +302,12 @@ Work was split into topic branches and merged into `main`:
 
 ---
 
-## Author
+## Maintainer and source credit
 
-**Onkar**
-GitHub: [@Sanket-dev98](https://github.com/Sanket-dev98)
+Maintainer of this copy: **Onkar Ghorpade** ([oghorpade060-eng](https://github.com/oghorpade060-eng)).
 
-## Maintainer
-Onkar Ghorpade
+Source reference retained from the earlier project documentation: [Sanket-dev98/library-management-platform](https://github.com/Sanket-dev98/library-management-platform).
 
+## Learning deployment note
+
+The documented in-memory store is for coursework and local demonstrations. Each process or replica has separate state, and restarts lose that state. A shared persistent database is needed before relying on this design across replicas. The Kubernetes commands demonstrate deployment mechanics; they do not make this in-memory application a production service.
